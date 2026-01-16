@@ -9,8 +9,8 @@ from sqlalchemy import MetaData, create_engine, text
 from alembic import context
 
 from app.utils.constants import PUBLIC_SCHEMA
-load_dotenv()
 
+load_dotenv()
 
 
 # this is the Alembic Config object, which provides
@@ -22,7 +22,6 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 logger = logging.getLogger("alembic.env")
-
 
 
 # gather section names referring to different
@@ -41,12 +40,13 @@ logger = logging.getLogger("alembic.env")
 #       'engine1':mymodel.metadata1,
 #       'engine2':mymodel.metadata2
 # }
-target_metadata = None
+target_metadata = entities.Base.metadata
 
 # other values from the config, defined by the needs of env.py,
 # can be acquired:
 # my_important_option = config.get_main_option("my_important_option")
 # ... etc.
+
 
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode.
@@ -93,7 +93,13 @@ def run_migrations_online():
     print("#############################################################")
     engine = create_engine(url)
 
-    is_autogenerating: bool = True if config.cmd_opts and hasattr(config.cmd_opts,'autogenerate') and config.cmd_opts.autogenerate else False
+    is_autogenerating: bool = (
+        True
+        if config.cmd_opts
+        and hasattr(config.cmd_opts, "autogenerate")
+        and config.cmd_opts.autogenerate
+        else False
+    )
 
     targeted_schema = context.get_x_argument(as_dictionary=True).get("tenant")
 
@@ -102,23 +108,25 @@ def run_migrations_online():
             script = directives[0]
             if script.upgrade_ops.is_empty():
                 directives[:] = []
-                print('No changes in schema detected.')
+                print("No changes in schema detected.")
 
     translated = entities.Base.metadata
     with engine.connect() as connection:
-        if not is_autogenerating :
+        if not is_autogenerating:
             if targeted_schema:
                 public_schema = PUBLIC_SCHEMA
                 if targeted_schema == public_schema:
                     translated = MetaData(schema=targeted_schema)
                 else:
                     raise Exception("schema not found")
-                #re assign the selected schema to the table
+                # re assign the selected schema to the table
                 print("#############################")
-                print('updating schema:', translated.schema)
+                print("updating schema:", translated.schema)
                 print("#############################")
 
-                connection.execute(text('CREATE SCHEMA IF NOT EXISTS "%s"' % translated.schema))
+                connection.execute(
+                    text('CREATE SCHEMA IF NOT EXISTS "%s"' % translated.schema)
+                )
                 connection.execute(text('set search_path to "%s"' % translated.schema))
                 connection.dialect.default_schema_name = translated.schema
                 connection.commit()
@@ -127,11 +135,12 @@ def run_migrations_online():
             connection=connection,
             target_metadata=translated,
             compare_type=True,
-            include_schemas= not is_autogenerating,
-            process_revision_directives=process_revision_directives
+            include_schemas=not is_autogenerating,
+            process_revision_directives=process_revision_directives,
         )
         with context.begin_transaction():
             context.run_migrations()
+
 
 if context.is_offline_mode():
     run_migrations_offline()

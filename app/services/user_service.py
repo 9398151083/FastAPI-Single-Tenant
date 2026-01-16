@@ -1,72 +1,67 @@
-from dataclasses import dataclass
-from fastapi import (
-    Depends, 
-    status,
-    HTTPException
-)
+from fastapi import Depends, HTTPException, status
 from pydantic import EmailStr
 from sqlalchemy.orm import Session
-from automapper import mapper
+
 from app.connectors.database_connector import get_db
 from app.entities.user import User
 from app.models.user_models import (
-    UserCreationRequest, 
+    UserCreationRequest,
     UserCreationResponse,
-    GetUserDetailsResponse
+    GetUserDetailsResponse,
 )
-from app.utils.constants import (
-    THE_USER_DETAILS_DOES_NOT_EXIST_FOR_THIS_ID
-)
+from app.utils.constants import THE_USER_DETAILS_DOES_NOT_EXIST_FOR_THIS_ID
 
 
-@dataclass
 class UserService:
-    db: Session = Depends(get_db)
+    def __init__(self, db: Session = Depends(get_db)):
+        self.db = db
 
-    def validate_user_details(self, user_details: User, user_id: int):
-        if not user_details:
+    # -------------------- VALIDATIONS --------------------
+
+    def validate_user_details(self, user: User | None, user_id: int) -> User:
+        if not user:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=F"{THE_USER_DETAILS_DOES_NOT_EXIST_FOR_THIS_ID} '{user_id}'"
+                detail=f"{THE_USER_DETAILS_DOES_NOT_EXIST_FOR_THIS_ID} '{user_id}'",
             )
-
-
-    def create_user(self, request: UserCreationRequest) -> UserCreationResponse:
-        user = User()
-        user.name = request.name
-        user.username = request.username
-        user.password = request.password
-        user.role = request.role
-        user.contact = request.contact
-        self.db.add(user)
-        self.db.commit()
         return user
 
+    # -------------------- CREATE USER --------------------
+
+    def create_user(self, request: UserCreationRequest) -> UserCreationResponse:
+        user = User(
+            name=request.name,
+            username=request.username,
+            password=request.password,  # ⚠️ Hash in production
+            role=request.role,
+            contact=request.contact,
+        )
+
+        self.db.add(user)
+        self.db.commit()
+        self.db.refresh(user)
+
+        return UserCreationResponse.model_validate(user)
+
+    # -------------------- GET USER BY ID --------------------
+
     def get_user_by_id(self, user_id: int) -> GetUserDetailsResponse:
-        user_details = self.db.get(User, user_id)
-        self.validate_user_details(user_details, user_id)
-        return mapper.to(GetUserDetailsResponse).map(user_details)
+        user = self.db.get(User, user_id)
+        user = self.validate_user_details(user, user_id)
+        return GetUserDetailsResponse.model_validate(user)
 
+    # -------------------- GET ALL USERS --------------------
 
-    def get_all_users(self):
-        return self.db.query(User).all()
+    def get_all_users(self) -> list[GetUserDetailsResponse]:
+        users = self.db.query(User).all()
+        return [GetUserDetailsResponse.model_validate(user) for user in users]
 
+    # -------------------- AUTH VALIDATION --------------------
 
     def validate_user(self, username: EmailStr, password: str) -> User | None:
-        # this logic should be remvoed once we create some users.
-        if self.db.query(User).count() == 0:
-            user_request = UserCreationRequest(
-                name=username.split("@")[0],
-                username=username,
-                password=password,
-                role="SuperAdmin",
-                contact="0987654321",
-            )
-            return self.create_user(user_request)
-        
-        user = self.db.query(User).where(User.username == username).first()  # type: ignore
+        user = self.db.query(User).filter(User.username == username).first()
 
         if user and user.verify_password(password):
             return user
-        else:
-            return None
+
+        return None
