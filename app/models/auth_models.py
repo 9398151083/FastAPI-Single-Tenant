@@ -1,4 +1,8 @@
+from typing import Optional
+from fastapi import Form
 from pydantic import BaseModel, EmailStr, Field, field_validator
+
+from fastapi.security import OAuth2PasswordRequestForm
 
 from app.utils.validators import validate_password
 
@@ -21,10 +25,6 @@ class VerifyRegisterRequest(BaseModel):
     email: EmailStr = Field(..., min_length=8, max_length=100)
     otp: str = Field(..., min_length=6, max_length=6)
     password: str = Field(..., min_length=8, max_length=20)
-
-    @field_validator("password")
-    def validate_user_creation_password(cls, password: str):
-        return validate_password(password)
 
 
 # =========================
@@ -49,3 +49,11 @@ class ResetPasswordRequest(BaseModel):
     email: EmailStr
     otp: str = Field(..., min_length=6, max_length=6)
     new_password: str = Field(..., min_length=8)
+
+
+class OAuth2PasswordRequestFormWithInvite(OAuth2PasswordRequestForm):
+    """Extended form for invite registration"""
+
+    token: str = Form(...)
+    group_id: str = Form(...)
+    name: Optional[str] = Form(None)

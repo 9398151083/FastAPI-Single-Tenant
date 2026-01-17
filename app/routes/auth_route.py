@@ -1,8 +1,9 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.connectors.database_connector import get_db
 from app.models.auth_models import (
+    OAuth2PasswordRequestFormWithInvite,
     RegisterRequest,
     VerifyRegisterRequest,
     LoginRequest,
@@ -11,6 +12,7 @@ from app.models.auth_models import (
 )
 from app.services.auth_service import AuthService
 from app.models.token_models import TokenResponse
+from app.utils.db_queries import get_invite_by_token
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
