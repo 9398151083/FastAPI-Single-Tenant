@@ -1,10 +1,12 @@
+"""✅ InviteService - Push for Existing Users + FIXED get_pending_invites"""
+
 from sqlalchemy.orm import Session
 import uuid
 from fastapi import HTTPException
-
+from sqlalchemy import and_
 from app.entities.user import User
 from app.entities.invite import Invite
-from app.models.invite_models import InviteResponse
+from app.entities.group import Group  # Add this import
 from app.utils.db_queries import (
     get_user_by_email,
     create_invite,
@@ -14,15 +16,17 @@ from app.utils.db_queries import (
     create_membership,
     accept_invite,
 )
-from app.utils.mailer import send_invite_email, send_otp_email
+from app.utils.mailer import send_invite_email
+from app.services.notification_service import NotificationService  # ✅ Add this
 
 
 class InviteService:
     def __init__(self, db: Session):
         self.db = db
+        self.notification_service = NotificationService(db)  # ✅ Notification service
 
     def invite_user(self, group_id: str, email: str, current_user: User):
-        """Invite logic - Push vs Email"""
+        """✅ PERFECT FLOW: Existing → Push, New → Email"""
         # Check group exists + user is owner/member
         group = get_group_by_id(self.db, group_id)
         if not group:
@@ -42,36 +46,31 @@ class InviteService:
         create_invite(self.db, invite_id, group_id, email, str(current_user.id), token)
 
         if user:
-            # ✅ EXISTING USER → Push notification
-            self.queue_push_notification(
-                str(user.id), f"Invited to '{group.name}' by {current_user.name}"
+            # ✅ EXISTING USER → INSTANT PUSH NOTIFICATION
+            self.notification_service.queue_push_notification(
+                str(user.id),
+                f"📧 {current_user.name} invited you to '{group.name}'",
+                group_id=group_id,
+                invite_token=token,
+                type="group_invite",
             )
+            self.db.commit()
             return {
                 "status": "push_sent",
                 "email": email,
                 "user_id": str(user.id),
                 "group_name": group.name,
             }
-
         else:
+            # ✅ NEW USER → Email registration link
             email_sent = send_invite_email(email, token, group.name, group_id)
-            return InviteResponse(
-                status="email_sent" if email_sent else "email_failed",
-                email=email,
-                invite_token=token,
-                group_name=group.name,
-            )
-            # # ✅ NEW USER → Email registration link
-            # invite_link = (
-            #     f"http://localhost:3000/register?token={token}&group={group_id}"
-            # )
-            # send_invite_email(email, invite_link, group.name)
-            # return {
-            #     "status": "email_sent",
-            #     "email": email,
-            #     "invite_token": token,
-            #     "group_name": group.name,
-            # }
+            self.db.commit()
+            return {
+                "status": "email_sent" if email_sent else "email_failed",
+                "email": email,
+                "invite_token": token,
+                "group_name": group.name,
+            }
 
     def join_by_invite_token(self, token: str, current_user: User):
         """Join group via invite token"""
@@ -79,7 +78,6 @@ class InviteService:
         if not invite or invite.status != "pending":
             raise ValueError("Invalid or expired invite")
 
-        # Auto-join user to group
         group_id = invite.group_id
         if is_user_member(self.db, group_id, str(current_user.id)):
             raise ValueError("Already a member of this group")
@@ -88,8 +86,6 @@ class InviteService:
         create_membership(
             self.db, membership_id, group_id, str(current_user.id), "member"
         )
-
-        # Mark invite as accepted
         accept_invite(self.db, invite.id)
         self.db.commit()
 
@@ -101,33 +97,32 @@ class InviteService:
             "group_name": group.name,
         }
 
-    def get_pending_invites(self, user_id: str):
-        """Get pending invites for user - FIXED NULL CHECK"""
-        # ✅ FIX: Get user first and check if exists
-        user = get_user_by_email(self.db, user_id)
-        if not user:
-            return []  # ✅ Return empty list if user not found
-
-        # Now safe to use user.email
+    def get_pending_invites(self, user_id: str):  # ✅ FIXED: user_id not email
+        """✅ FIXED: Query by user_id, not email"""
         invites = (
             self.db.query(Invite)
             .filter(
-                Invite.email == user.email,  # ✅ SAFE - user exists
-                Invite.status == "pending",
+                and_(
+                    Invite.invited_by == user_id,  # ✅ Invites SENT BY this user
+                    Invite.status == "pending",
+                )
             )
             .all()
         )
 
         return [
             {
-                "id": invite.id,
+                "id": str(invite.id),
                 "group_id": invite.group_id,
                 "group_name": (
-                    get_group_by_id(self.db, invite.group_id).name
-                    if get_group_by_id(self.db, invite.group_id)
+                    self.db.query(Group)
+                    .filter(Group.id == invite.group_id)
+                    .first()
+                    .name
+                    if self.db.query(Group).filter(Group.id == invite.group_id).first()
                     else "Unknown"
                 ),
-                "invited_by": invite.invited_by,
+                "email": invite.email,
                 "token": invite.token,
                 "created_at": (
                     invite.created_at.isoformat() if invite.created_at else None
@@ -135,7 +130,3 @@ class InviteService:
             }
             for invite in invites
         ]
-
-    def queue_push_notification(self, user_id: str, message: str):
-        """Queue push notification (WebSocket/FCM later)"""
-        print(f"🚨 PUSH: {message} → user {user_id}")

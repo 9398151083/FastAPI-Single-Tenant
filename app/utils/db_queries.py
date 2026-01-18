@@ -148,7 +148,7 @@ def create_membership(
         id=membership_id, group_id=group_id, user_id=user_id, role=role
     )
     db.add(membership)
-    db.flush()
+
     return membership
 
 
@@ -282,8 +282,187 @@ def create_user(db: Session, user_id: str, email: str, password: str, name: str)
         password=password,
         name=name,
         is_active=True,
-        is_verfied=True,
+        is_verified=True,
     )
     db.add(user)
 
     return user
+
+
+def create_task(db: Session, **kwargs):
+    """Create task - EXPLICIT MAPPING"""
+    # task_data = {
+    #         "id": task_id,
+    #         "group_id": group_id,
+    #         "title": title,
+    #         "created_by": str(current_user.id),
+    #         "description": kwargs.get("description"),
+    #         "assigned_to": kwargs.get("assigned_to"),
+    #         "status": kwargs.get("status", "pending"),
+    #         "priority": kwargs.get("priority", "medium"),
+    #         "due_date": kwargs.get("due_date"),
+    #     }
+
+    # ✅ EXTRACT & VALIDATE fields individually
+    created_by = kwargs.get("created_by")
+    description = kwargs.get("description")
+    assigned_to = kwargs.get("assigned_to")
+    status = kwargs.get("status", "pending")
+    priority = kwargs.get("priority", "medium")
+    due_date = kwargs.get("due_date")
+
+    # ✅ UUID VALIDATION (prevents "string" error)
+    if assigned_to and len(assigned_to) != 36:  # Quick UUID check
+        assigned_to = None
+
+    # ✅ EXPLICIT MAPPING - NO ** unpacking
+    task = Task(
+        id=kwargs.get("id"),
+        group_id=kwargs.get("group_id"),
+        title=kwargs.get("title"),
+        created_by=created_by,
+        description=description,
+        assigned_to=assigned_to,
+        status=status,
+        priority=priority,
+        due_date=due_date,
+    )
+
+    db.add(task)
+    db.commit()
+    db.refresh(task)
+    return task
+
+
+# Usage stays simple:
+
+
+def get_group_tasks(db: Session, group_id: str):
+    """Get all tasks for specific group"""
+    return (
+        db.query(Task)
+        .filter(Task.group_id == group_id)
+        .order_by(Task.created_at.desc())
+        .all()
+    )
+
+
+def get_user_group_tasks(db: Session, user_id: str):
+    """Get tasks from all user's groups"""
+    result = (
+        db.query(Task)
+        .join(GroupMembership, GroupMembership.group_id == Task.group_id)
+        .filter(GroupMembership.user_id == user_id)
+        .all()
+    )
+    return result
+
+
+# app/utils/db_queries.py - ADD THESE:
+def get_task_by_id(db: Session, task_id: str):
+    return db.query(Task).filter(Task.id == task_id).first()
+
+
+def get_task_stats(db: Session, group_id: str):
+    return (
+        db.query(
+            func.count(Task.id).label("total"),
+            # ... rest of stats query
+        )
+        .filter(Task.group_id == group_id)
+        .one()
+    )
+
+
+# ✅ ADD THESE FUNCTIONS TO YOUR EXISTING db_queries.py
+
+from sqlalchemy.orm import Session
+from sqlalchemy import func
+from app.entities.notifications import UserNotification
+
+
+def get_user_notifications(
+    db: Session, user_id: str, limit: int = 50, unread_only: bool = False
+):
+    """Get user notifications"""
+    query = db.query(UserNotification).filter(UserNotification.user_id == user_id)
+
+    if unread_only:
+        query = query.filter(UserNotification.is_read == False)
+
+    return query.order_by(UserNotification.created_at.desc()).limit(limit).all()
+
+
+def get_notification_stats(db: Session, user_id: str):
+    """Get notification statistics"""
+    stats = (
+        db.query(
+            func.count(UserNotification.id).label("total"),
+            func.sum(func.case((UserNotification.is_read == False, 1), else_=0)).label(
+                "unread"
+            ),
+        )
+        .filter(UserNotification.user_id == user_id)
+        .one()
+    )
+
+    return {
+        "total": int(stats.total),
+        "unread": int(stats.unread or 0),
+        "read": int(stats.total - (stats.unread or 0)),
+    }
+
+
+def mark_notification_read(db: Session, notification_id: str, user_id: str):
+    """Mark notification read"""
+    notif = (
+        db.query(UserNotification)
+        .filter(
+            UserNotification.id == notification_id, UserNotification.user_id == user_id
+        )
+        .first()
+    )
+
+    if notif:
+        notif.is_read = True
+        db.commit()
+        return True
+    return False
+
+
+def mark_all_notifications_read(db: Session, user_id: str):
+    """Mark all notifications read"""
+    count = (
+        db.query(UserNotification)
+        .filter(UserNotification.user_id == user_id, UserNotification.is_read == False)
+        .update({"is_read": True})
+    )
+
+    db.commit()
+    return count
+
+
+def delete_user_notification(db: Session, notification_id: str, user_id: str):
+    """Delete single notification"""
+    count = (
+        db.query(UserNotification)
+        .filter(
+            UserNotification.id == notification_id, UserNotification.user_id == user_id
+        )
+        .delete()
+    )
+
+    if count > 0:
+        db.commit()
+        return True
+    return False
+
+
+def delete_all_user_notifications(db: Session, user_id: str):
+    """Delete all user notifications"""
+    count = (
+        db.query(UserNotification).filter(UserNotification.user_id == user_id).delete()
+    )
+
+    db.commit()
+    return count

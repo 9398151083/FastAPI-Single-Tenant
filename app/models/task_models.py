@@ -1,39 +1,47 @@
-from pydantic import BaseModel, ConfigDict
-from typing import List, Optional
-from datetime import date
-import uuid
+"""Task Models - DATETIME FIXED"""
+
+from pydantic import BaseModel, Field
+from typing import Optional
+from datetime import datetime
 
 
 class TaskCreate(BaseModel):
-    title: str
-    description: str = ""
-    group_id: str = "00000000-0000-0000-0000-000000000000"
-    priority: str = "medium"
-    status: str = "open"
-    assigned_to: str | None = None  # ✅ None, not "string"
-    parent_id: str | None = None  # ✅ None, not "string"
-    due_date: str | None = None
+    model_config = {"arbitrary_types_allowed": True}  # ✅ FIXES datetime
+
+    title: str = Field(..., max_length=200)
+    description: Optional[str] = Field(None, max_length=1000)
+    assigned_to: Optional[str] = Field(None)
+    priority: str = Field("medium", pattern="^(low|medium|high)$")
+    due_date: Optional[datetime] = None  # ✅ Now works
+    status: str = Field("pending", pattern="^(pending|in-progress|done)$")
+
+
+class TaskUpdateStatus(BaseModel):
+    status: str = Field(..., pattern="^(pending|in-progress|done)$")
+
+
+class TaskAssign(BaseModel):
+    assignee_id: str = Field(...)
 
 
 class TaskResponse(BaseModel):
+
     id: str
     group_id: str
     title: str
-    description: str
-    assigned_to: str | None
-    parent_id: str | None
-    priority: str
+    description: Optional[str]
+    assigned_to: Optional[str]
     status: str
-    due_date: Optional[str | date]
+    priority: str
+    due_date: Optional[str]  # ✅ String for API response
+    created_by: str
+    created_at: Optional[str]
 
 
-class TaskListResponse(BaseModel):
-    tasks: List[TaskResponse]
+class TaskStatsResponse(BaseModel):
+
     total: int
-
-
-# ✅ MISSING PIECE - Add this!
-class TaskSummary(BaseModel):
-    total_tasks: int
-    open: int
-    completed: int
+    pending: int
+    in_progress: int
+    done: int
+    completion_rate: float = Field(..., ge=0.0, le=1.0)

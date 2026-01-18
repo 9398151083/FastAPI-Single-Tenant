@@ -1,33 +1,22 @@
-from datetime import datetime
-import uuid
-
-import sqlalchemy as sa
+from sqlalchemy import Column, String, DateTime, Float, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
-
+import sqlalchemy as sa
 from app.connectors.database_connector import Base
+import uuid
 
 
 class Task(Base):
-    """
-    Task / Subtask Entity
-    """
-
     __tablename__ = "tasks"
 
-    id: uuid.UUID = sa.Column(UUID(as_uuid=False), primary_key=True, nullable=False)
-
-    group_id: uuid.UUID = sa.Column(UUID(as_uuid=False), nullable=False, index=True)
-
-    title: str = sa.Column(sa.String(200), nullable=False)
-    description: str = sa.Column(sa.Text)
-
-    assigned_to: uuid.UUID = sa.Column(
-        UUID(as_uuid=False)
-    )  # logical reference to users.id
-
-    parent_id: uuid.UUID = sa.Column(UUID(as_uuid=False))  # self-reference for subtasks
-
-    priority: str = sa.Column(sa.String(50), nullable=False, default="medium")
-    status: str = sa.Column(sa.String(50), nullable=False, default="open")
-
-    due_date = sa.Column(sa.Date)
+    id = Column(
+        UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    group_id = Column(UUID(as_uuid=False), nullable=False, index=True)
+    title = Column(sa.String(200), nullable=False)
+    description = Column(sa.Text)
+    assigned_to = Column(UUID(as_uuid=False))  # Optional assignee
+    status = Column(sa.String(20), default="pending")  # pending/in-progress/done
+    priority = Column(sa.String(20), default="medium")  # low/medium/high
+    due_date = Column(sa.DateTime)
+    created_by = Column(UUID(as_uuid=False), nullable=False)
+    created_at = Column(sa.DateTime, default=sa.func.now())
