@@ -1,16 +1,17 @@
 """
-✅ WebSocket Routes for Desktop Push Notifications + OFFLINE SUPPORT
-Desktop App URL: ws://localhost:8000/ws/notifications/{user_id}
-Online=Instant | Offline=DB Queue → Delivered on reconnect!
+✅ WebSocket Routes - Updated for New ConnectionManager
+Desktop App: ws://localhost:8000/ws/notifications/{user_id}
 """
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends
 from sqlalchemy.orm import Session
-from app.utils.notification_utils import NotificationManager, get_unread_notifications
-from app.connectors.database_connector import get_db
+from datetime import datetime
 import json
 
-# ✅ Your existing router setup
+from app.connectors.database_connector import get_db
+from app.websocket.manager import notification_manager  # ✅ NEW IMPORT
+from app.services.notification_service import NotificationService  # ✅ NEW
+
 router = APIRouter(prefix="/ws", tags=["WebSocket"])
 
 
@@ -18,78 +19,80 @@ router = APIRouter(prefix="/ws", tags=["WebSocket"])
 async def websocket_notifications(
     websocket: WebSocket,
     user_id: str,
-    db: Session = Depends(get_db),  # ✅ DB for offline notifications
+    db: Session = Depends(get_db),
 ):
     """
-    ✅ DESKTOP APP CONNECTS HERE:
-    ws://localhost:8000/ws/notifications/user123
-
-    1. DELIVER missed offline notifications FIRST
-    2. Connect to NotificationManager
-    3. TaskService → notify_group_members() → INSTANT new notifications
+    ✅ PERFECT FLOW:
+    1. Send missed notifications (DB)
+    2. Connect to live notifications (WebSocket)
+    3. Handle disconnect cleanly
     """
+
     await websocket.accept()
+    print(f"🔌 {user_id} WebSocket CONNECTED")
 
-    # ✅ STEP 1: DELIVER ALL MISSED NOTIFICATIONS (Offline queue)
-    print(f"📬 Checking missed notifications for {user_id}")
-    missed_notifications = await get_unread_notifications(db, user_id)
+    # ✅ STEP 1: DELIVER MISSED NOTIFICATIONS
+    notification_service = NotificationService(db)
+    notifications = notification_service.get_user_notifications(
+        user_id, unread_only=True
+    )
 
-    for notif in missed_notifications:
+    for notif in notifications["notifications"]:
         notif_dict = {
-            "id": str(notif.id),
-            "group_id": notif.group_id,
-            "user_id": notif.user_id,
-            "title": notif.title,
-            "message": notif.message,
-            "data": notif.data,
-            "type": notif.type,
-            "timestamp": notif.created_at.isoformat(),
-            "delivery_type": "missed",  # Special flag
+            "type": "notification",
+            "id": notif["id"],
+            "group_id": notif["group_id"],
+            "title": notif["title"],
+            "message": notif["message"],
+            "data": notif["data"],
+            "delivery_type": "missed",
+            "timestamp": notif["created_at"],
         }
-        await websocket.send_text(json.dumps(notif_dict))
-        print(f"📤 SENT MISSED → {user_id[:8]}: {notif.title}")
+        await websocket.send_json(notif_dict)
+        print(f"📤 SENT MISSED → {user_id[:8]}: {notif['title']}")
 
-    if missed_notifications:
-        print(f"✅ Caught up {len(missed_notifications)} missed notifications")
+    if notifications["notifications"]:
+        print(
+            f"✅ Caught up {len(notifications['notifications'])} missed notifications"
+        )
 
-    # ✅ STEP 2: Welcome + Connect to live notifications
-    await NotificationManager.connect(websocket, user_id)
+    # ✅ STEP 2: Connect to NotificationManager for LIVE notifications
+    await notification_manager.connect(user_id, websocket)
 
     try:
-        # ✅ STEP 3: Keep connection alive (Desktop 24/7)
+        # ✅ STEP 3: Keep connection alive (heartbeat)
         while True:
-            await websocket.receive_text()  # Ping/pong heartbeat
+            await websocket.receive_text()  # Ping/pong
     except WebSocketDisconnect:
         print(f"🔌 {user_id} disconnected normally")
-        await NotificationManager.disconnect(websocket)
     except Exception as e:
-        print(f"❌ WebSocket error for {user_id}: {e}")
-        await NotificationManager.disconnect(websocket)
+        print(f"❌ WebSocket error {user_id}: {e}")
+    finally:
+        # ✅ CLEAN DISCONNECT
+        notification_manager.disconnect(user_id)
 
 
 @router.websocket("/ping")
 async def websocket_ping(websocket: WebSocket):
-    """✅ Health check endpoint for desktop apps"""
+    """✅ Health check for desktop apps"""
     await websocket.accept()
-    await websocket.send_text(
-        '{"type": "pong", "status": "alive", "timestamp": "'
-        + str(datetime.now().isoformat())
-        + '"}'
+    await websocket.send_json(
+        {"type": "pong", "status": "alive", "timestamp": datetime.utcnow().isoformat()}
     )
     await websocket.close()
 
 
 @router.websocket("/status")
 async def websocket_status(websocket: WebSocket):
-    """✅ Status endpoint - returns active connections count"""
+    """✅ Connection stats"""
+    from app.websockets.manager import notification_manager
+
     await websocket.accept()
-    await websocket.send_text(
-        json.dumps(
-            {
-                "type": "status",
-                "active_connections": len(NotificationManager.active_connections),
-                "status": "healthy",
-            }
-        )
+    await websocket.send_json(
+        {
+            "type": "status",
+            "active_connections": len(notification_manager.active_connections),
+            "status": "healthy",
+        }
     )
     await websocket.close()

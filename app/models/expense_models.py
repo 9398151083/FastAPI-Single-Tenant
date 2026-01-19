@@ -1,3 +1,4 @@
+from proto import Field
 from pydantic import BaseModel, ConfigDict
 from typing import List, Optional
 from datetime import datetime
@@ -22,3 +23,14 @@ class ExpenseResponse(BaseModel):
 class ExpenseListResponse(BaseModel):
     expenses: List[ExpenseResponse]
     total: int
+
+
+class CreateExpenseRequest(BaseModel):
+    group_id: str
+    title: str
+    amount: float
+
+
+class SplitExpenseRequest(BaseModel):
+    members: List[str]  # All who share expense
+    payers: Optional[List[dict]] = None  # [{"user_id": "uuid", "amount": 400}]

@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>🧪 Notification Test</title>
+    <style>
+        body {
+            font-family: Arial;
+            padding: 20px;
+        }
+
+        #logs {
+            background: #f5f5f5;
+            padding: 15px;
+            height: 300px;
+            overflow-y: scroll;
+            border-radius: 5px;
+        }
+
+        button {
+            padding: 10px 20px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>🚀 WebSocket Notification Tester</h1>
+    <p><strong>User ID:</strong> <span id="userId">76f84374-19b8-4811-b36e-4e74b1c19d82</span></p>
+    <button onclick="testSplit()">🎯 Trigger Test Split (Terminal)</button>
+    <div id="logs">Waiting for WebSocket connection...</div>
+
+    <script>
+        const userId = "76f84374-19b8-4811-b36e-4e74b1c19d82";  // YOUR USER ID ✅
+        const logsDiv = document.getElementById('logs');
+
+        function addLog(message) {
+            const time = new Date().toLocaleTimeString();
+            logsDiv.innerHTML += `<p><strong>${time}</strong> ${message}</p>`;
+            logsDiv.scrollTop = logsDiv.scrollHeight;
+            console.log(message);
+        }
+
+        // Connect WebSocket
+        const ws = new WebSocket(`ws://localhost:8000/ws/notifications/${userId}`);
+
+        ws.onopen = () => {
+            addLog("✅ CONNECTED! Ready for notifications!");
+            document.querySelector('button').disabled = false;
+        };
+
+        ws.onmessage = (event) => {
+            const notif = JSON.parse(event.data);
+            addLog(`🚨 NOTIFICATION: ${notif.message}`);
+            alert(`🎉 PUSH RECEIVED: ${notif.message}`);
+        };
+
+        ws.onerror = (e) => addLog("❌ WebSocket Error");
+        ws.onclose = () => addLog("🔌 Connection closed");
+
+        function testSplit() {
+            addLog("🎯 Open Terminal 2 → Run split expense curl command!");
+        }
+    </script>
+</body>
+
+</html>

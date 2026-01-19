@@ -1,11 +1,17 @@
+import datetime
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, and_
 from typing import List
+from app.entities import group_member
 from app.entities.expense import Expense
+from app.entities.expense_split import ExpenseSplit
 from app.entities.invite import Invite
 from app.entities.task import Task
 from app.entities.user import User
 import uuid
+
+from sqlalchemy import func
+from app.entities.notifications import UserNotification
 
 # ✅ Import
 
@@ -376,10 +382,6 @@ def get_task_stats(db: Session, group_id: str):
 
 # ✅ ADD THESE FUNCTIONS TO YOUR EXISTING db_queries.py
 
-from sqlalchemy.orm import Session
-from sqlalchemy import func
-from app.entities.notifications import UserNotification
-
 
 def get_user_notifications(
     db: Session, user_id: str, limit: int = 50, unread_only: bool = False
@@ -466,3 +468,125 @@ def delete_all_user_notifications(db: Session, user_id: str):
 
     db.commit()
     return count
+
+
+def get_user_groups(db: Session, user_id: str) -> List[Group]:
+    """Get all groups user belongs to"""
+    return (
+        db.query(Group)
+        .join(GroupMembership, Group.id == GroupMembership.group_id)
+        .filter(GroupMembership.user_id == user_id)
+        .all()
+    )
+
+
+def get_expense_by_id(db: Session, expense_id: str) -> Expense:
+    """Get single expense by ID"""
+    return db.query(Expense).filter(Expense.id == expense_id).first()
+
+
+def get_group_expenses(db: Session, group_id: str) -> List[Expense]:
+    """Get all expenses for a group"""
+    return (
+        db.query(Expense)
+        .filter(Expense.group_id == group_id)
+        .order_by(Expense.created_at.desc())
+        .all()
+    )
+
+
+def get_user_expenses_in_group(
+    db: Session, user_id: str, group_id: str
+) -> List[Expense]:
+    """Get expenses created by user in specific group"""
+    return (
+        db.query(Expense)
+        .filter(and_(Expense.created_by == user_id, Expense.group_id == group_id))
+        .order_by(Expense.created_at.desc())
+        .all()
+    )
+
+
+def create_expense(db: Session, expense_data: dict) -> Expense:
+    """Create new expense"""
+    expense = Expense(**expense_data)
+    db.add(expense)
+    db.commit()
+    db.refresh(expense)
+    return expense
+
+
+def create_expense_splits(db: Session, splits: List[dict]) -> List[ExpenseSplit]:
+    """Create multiple splits at once"""
+    created_splits = []
+    for split_data in splits:
+        split = ExpenseSplit(**split_data)
+        db.add(split)
+        created_splits.append(split)
+    db.commit()
+    return created_splits
+
+
+def get_user_debts(db: Session, user_id: str) -> List[ExpenseSplit]:
+    """Get all debts for user (what they owe + what others owe them)"""
+    return (
+        db.query(ExpenseSplit)
+        .filter(
+            and_(ExpenseSplit.owes_user_id == user_id, ExpenseSplit.is_settled == False)
+        )
+        .all()
+    )
+
+
+def get_owed_to_user(db: Session, user_id: str) -> List[ExpenseSplit]:
+    """Get money owed TO this user"""
+    return (
+        db.query(ExpenseSplit)
+        .filter(
+            and_(ExpenseSplit.owed_user_id == user_id, ExpenseSplit.is_settled == False)
+        )
+        .all()
+    )
+
+
+def get_invite_by_token(db: Session, token: str):
+    """Get invite by token"""
+    return db.query(Invite).filter(Invite.token == token).first()
+
+
+def is_user_member(db: Session, group_id: str, user_id: str) -> bool:
+    """Check if user is group member"""
+    return (
+        db.query(GroupMembership)
+        .filter(
+            GroupMembership.group_id == group_id, GroupMembership.user_id == user_id
+        )
+        .first()
+        is not None
+    )
+
+
+def add_user_to_group(db: Session, group_id: str, user_id: str):
+    """Add user to group members"""
+    group_member = GroupMembership(
+        id=str(uuid.uuid4()),
+        group_id=group_id,
+        user_id=user_id,
+        joined_at=datetime.utcnow(),
+    )
+    db.add(group_member)
+
+
+def get_group_members(db: Session, group_id: str) -> List[str]:
+    """Get all member user_ids"""
+    return [
+        row.user_id
+        for row in db.query(GroupMembership.user_id)
+        .filter(GroupMembership.group_id == group_id)
+        .all()
+    ]
+
+
+def get_group_by_id(db: Session, group_id: str):
+    """Get group details"""
+    return db.query(Group).filter(Group.id == group_id).first()

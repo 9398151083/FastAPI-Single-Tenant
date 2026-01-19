@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import List
 
@@ -42,15 +42,20 @@ async def get_user_groups(
 @router.post("/{group_id}/join", response_model=JoinGroupResponse)
 async def join_group(
     group_id: str,
+    token: str = Query(..., description="Invite token from notification"),  # ✅ NEW
     current_user: User = Depends(verify_auth_token),
     db: Session = Depends(get_db),
 ):
-    """Join existing group"""
+    """✅ Join group via notification invite token"""
     try:
         service = GroupService(db)
-        return service.join_group(group_id, current_user)
+        return await service.join_group_with_token(
+            group_id, token, current_user
+        )  # ✅ Token method
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise  # Re-raise HTTP exceptions
 
 
 @router.get("/", response_model=list[dict])

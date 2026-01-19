@@ -47,7 +47,7 @@ class InviteService:
 
         if user:
             # ✅ EXISTING USER → INSTANT PUSH NOTIFICATION
-            self.notification_service.queue_push_notification(
+            self.notification_service.queue_push_notifications(
                 str(user.id),
                 f"📧 {current_user.name} invited you to '{group.name}'",
                 group_id=group_id,
