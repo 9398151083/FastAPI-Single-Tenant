@@ -62,3 +62,20 @@ class MembershipResponse(BaseModel):
     user_id: str
     role: str
     joined_at: Optional[str] = None
+
+
+from pydantic import BaseModel
+from typing import Optional
+
+
+class GroupResponse(BaseModel):
+    id: str
+    name: str
+    description: Optional[str] = None  # ✅ MUST be optional
+
+    class Config:
+        from_attributes = True
+
+
+class UserGroupsResponse(BaseModel):
+    groups: list[GroupResponse]

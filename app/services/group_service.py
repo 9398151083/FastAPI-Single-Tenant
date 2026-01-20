@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 import uuid
 from fastapi import HTTPException
-
+from app.models.group_models import GroupResponse
 from app.entities.user import User
 from app.models.group_models import GroupResponse
 from app.services.notification_service import NotificationService
@@ -55,8 +55,9 @@ class GroupService:
 
     def get_user_groups(self, current_user: User):
         """Get all groups for current user"""
-        groups = get_user_groups(self.db, str(current_user.id))
-        return {"groups": groups}
+        groups = get_user_groups(self.db, str(current_user.id))  # ORM list
+
+        return {"groups": [GroupResponse.from_orm(g).dict() for g in groups]}
 
     def join_group(self, group_id: str, current_user: User):
         """Join existing group"""
