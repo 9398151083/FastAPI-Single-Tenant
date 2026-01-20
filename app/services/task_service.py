@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import case, func
 import uuid
 import asyncio
 from typing import List, Dict, Any
@@ -209,7 +209,7 @@ class TaskService:
         )
 
         self.db.commit()
-        self.db.refresh(task)
+
         return TaskResponse(
             id=task.id,
             group_id=task.group_id,
@@ -235,6 +235,7 @@ class TaskService:
         self.db.delete(task)
         self.db.commit()
         print(f"✅ Task deleted: {task_id}")
+        return task
 
     def get_task_stats(self, group_id: str, current_user: User) -> Dict[str, Any]:
         """Group task statistics - EFFICIENT SQL QUERY"""
@@ -245,13 +246,24 @@ class TaskService:
         stats = (
             self.db.query(
                 func.count(Task.id).label("total"),
-                func.sum(func.case((Task.status == "pending", 1), else_=0)).label(
-                    "pending"
-                ),
-                func.sum(func.case((Task.status == "in-progress", 1), else_=0)).label(
-                    "in_progress"
-                ),
-                func.sum(func.case((Task.status == "done", 1), else_=0)).label("done"),
+                func.sum(
+                    case(
+                        (Task.status == "pending", 1),
+                        else_=0,
+                    )
+                ).label("pending"),
+                func.sum(
+                    case(
+                        (Task.status == "in-progress", 1),
+                        else_=0,
+                    )
+                ).label("in_progress"),
+                func.sum(
+                    case(
+                        (Task.status == "done", 1),
+                        else_=0,
+                    )
+                ).label("done"),
             )
             .filter(Task.group_id == group_id)
             .one()
