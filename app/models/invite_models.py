@@ -26,6 +26,9 @@ class InviteResponse(BaseModel):
     invite_token: Optional[str] = None
     group_name: str
 
+    class Config:
+        from_attributes = True
+
 
 class JoinInviteResponse(BaseModel):
     """Result after joining via invite"""
