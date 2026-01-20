@@ -572,7 +572,6 @@ def add_user_to_group(db: Session, group_id: str, user_id: str):
         id=str(uuid.uuid4()),
         group_id=group_id,
         user_id=user_id,
-        joined_at=datetime.utcnow(),
     )
     db.add(group_member)
 

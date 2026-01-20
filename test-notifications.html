@@ -2,69 +2,224 @@
 <html>
 
 <head>
-    <title>🧪 Notification Test</title>
+    <title>🧪 Splitwise Notification Tester</title>
     <style>
         body {
             font-family: Arial;
             padding: 20px;
+            max-width: 700px;
+            margin: 0 auto;
         }
 
         #logs {
-            background: #f5f5f5;
+            background: #f8f9fa;
             padding: 15px;
-            height: 300px;
+            height: 400px;
             overflow-y: scroll;
-            border-radius: 5px;
+            border-radius: 8px;
+            border: 1px solid #dee2e6;
+            font-family: monospace;
+            line-height: 1.4;
+        }
+
+        .notification {
+            background: linear-gradient(135deg, #d4edda, #c3e6cb);
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 10px;
+            border-left: 5px solid #28a745;
+            box-shadow: 0 2px 8px rgba(40, 167, 69, 0.2);
+        }
+
+        .join-btn {
+            background: linear-gradient(45deg, #28a745, #20c997);
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 14px;
+            margin-top: 8px;
+            box-shadow: 0 4px 12px rgba(40, 167, 69, 0.3);
+        }
+
+        .join-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(40, 167, 69, 0.4);
+        }
+
+        .join-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
         }
 
         button {
-            padding: 10px 20px;
+            padding: 12px 24px;
             background: #007bff;
             color: white;
             border: none;
-            border-radius: 5px;
+            border-radius: 25px;
             cursor: pointer;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+
+        #status {
+            padding: 10px;
+            border-radius: 5px;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+
+        .status-online {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status-connecting {
+            background: #fff3cd;
+            color: #856404;
         }
     </style>
 </head>
 
 <body>
-    <h1>🚀 WebSocket Notification Tester</h1>
-    <p><strong>User ID:</strong> <span id="userId">76f84374-19b8-4811-b36e-4e74b1c19d82</span></p>
-    <button onclick="testSplit()">🎯 Trigger Test Split (Terminal)</button>
+    <h1>🚀 Splitwise Push Notifications</h1>
+    <p><strong>User ID:</strong> <span id="userId">a8e17a46-da8b-467e-991e-f5d1236e9a7e</span></p>
+    <div id="status" class="status-connecting">🔄 Connecting...</div>
+    <button onclick="testSplit()" disabled>🎯 Test Invite (FastAPI Docs)</button>
     <div id="logs">Waiting for WebSocket connection...</div>
 
     <script>
-        const userId = "76f84374-19b8-4811-b36e-4e74b1c19d82";  // YOUR USER ID ✅
+        const userId = "a8e17a46-da8b-467e-991e-f5d1236e9a7e";
         const logsDiv = document.getElementById('logs');
+        const statusDiv = document.getElementById('status');
+        let ws = null;
+        let reconnectAttempts = 0;
+        const maxReconnects = 50;
 
-        function addLog(message) {
+        function addLog(message, isNotification = false) {
             const time = new Date().toLocaleTimeString();
-            logsDiv.innerHTML += `<p><strong>${time}</strong> ${message}</p>`;
+            const div = document.createElement('div');
+
+            if (isNotification) {
+                div.className = 'notification';
+                div.innerHTML = `
+                    <div style="font-size: 16px; margin-bottom: 5px;">
+                        <strong>${time}</strong> 
+                        <span style="color: #155724;">🚨 LIVE NOTIFICATION</span>
+                    </div>
+                    <div style="font-size: 14px; color: #495057;">${message}</div>
+                `;
+            } else {
+                div.innerHTML = `<p><strong>${time}</strong> ${message}</p>`;
+                div.style.margin = '5px 0';
+            }
+
+            logsDiv.appendChild(div);
             logsDiv.scrollTop = logsDiv.scrollHeight;
-            console.log(message);
+            console.log(`${time} ${message}`);
         }
 
-        // Connect WebSocket
-        const ws = new WebSocket(`ws://localhost:8000/ws/notifications/${userId}`);
+        function updateStatus(status, className) {
+            statusDiv.textContent = status;
+            statusDiv.className = className;
+        }
 
-        ws.onopen = () => {
-            addLog("✅ CONNECTED! Ready for notifications!");
-            document.querySelector('button').disabled = false;
-        };
+        function createJoinButton(joinUrl, groupName) {
+            const btn = document.createElement('button');
+            btn.className = 'join-btn';
+            btn.textContent = `✅ Join "${groupName}"`;
+            btn.onclick = async () => {
+                btn.disabled = true;
+                btn.textContent = '⏳ Joining...';
 
-        ws.onmessage = (event) => {
-            const notif = JSON.parse(event.data);
-            addLog(`🚨 NOTIFICATION: ${notif.message}`);
-            alert(`🎉 PUSH RECEIVED: ${notif.message}`);
-        };
+                try {
+                    const response = await fetch(joinUrl, {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': 'Bearer YOUR_JWT_TOKEN_HERE',
+                            'Content-Type': 'application/json'
+                        }
+                    });
+                    const result = await response.json();
+                    addLog(`🎉 Successfully joined "${groupName}"!`, true);
+                } catch (error) {
+                    addLog(`❌ Join failed: ${error.message}`, false);
+                    btn.textContent = '❌ Retry';
+                    btn.disabled = false;
+                }
+            };
+            return btn;
+        }
 
-        ws.onerror = (e) => addLog("❌ WebSocket Error");
-        ws.onclose = () => addLog("🔌 Connection closed");
+        async function connectWebSocket() {
+            if (reconnectAttempts >= maxReconnects) {
+                updateStatus("❌ Max reconnects reached", "status-connecting");
+                return;
+            }
+
+            reconnectAttempts++;
+            updateStatus("🔄 Connecting... (" + reconnectAttempts + ")", "status-connecting");
+
+            try {
+                if (ws) ws.close();
+
+                ws = new WebSocket(`ws://localhost:8000/ws/notifications/${userId}`);
+
+                ws.onopen = () => {
+                    reconnectAttempts = 0;
+                    updateStatus("✅ ALWAYS ONLINE! Ready for Splitwise invites!", "status-online");
+                    addLog("🎉 WebSocket connected - Send invites to test!", false);
+                    document.querySelector('button').disabled = false;
+                };
+
+                // ✅ REAL SPLITWISE MESSAGES - NO POPUP!
+                ws.onmessage = (event) => {
+                    try {
+                        const data = JSON.parse(event.data);
+                        console.log("📱 FULL PAYLOAD:", data);
+
+                        // ✅ SHOW ACTUAL BACKEND MESSAGE
+                        const message = data.message || data.title || JSON.stringify(data);
+                        addLog(message, true);
+
+                        // ✅ SPLITWISE JOIN BUTTON
+                        if (data.data?.join_url) {
+                            const btn = createJoinButton(data.data.join_url, data.data.group_name || 'Group');
+                            logsDiv.appendChild(btn);
+                            logsDiv.appendChild(document.createElement('br'));
+                        }
+                    } catch (e) {
+                        console.error("Parse error:", e);
+                        addLog("❌ Error parsing notification", false);
+                    }
+                };
+
+                ws.onclose = (event) => {
+                    console.log("🔌 Closed:", event.code, event.reason);
+                    updateStatus("🔌 Reconnecting...", "status-connecting");
+                    setTimeout(connectWebSocket, Math.min(1000 * Math.pow(2, reconnectAttempts), 10000));
+                };
+
+                ws.onerror = (error) => {
+                    console.error("❌ WebSocket error:", error);
+                    addLog("❌ Connection error - retrying...", false);
+                };
+
+            } catch (e) {
+                console.error("Connection failed:", e);
+                setTimeout(connectWebSocket, 2000);
+            }
+        }
 
         function testSplit() {
-            addLog("🎯 Open Terminal 2 → Run split expense curl command!");
+            addLog("🎯 Open FastAPI docs → POST /groups/{group_id} → Send invite!", false);
         }
+
+        // Auto-connect
+        connectWebSocket();
     </script>
 </body>
 

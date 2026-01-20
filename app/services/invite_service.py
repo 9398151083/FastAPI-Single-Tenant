@@ -25,7 +25,7 @@ class InviteService:
         self.db = db
         self.notification_service = NotificationService(db)  # ✅ Notification service
 
-    def invite_user(self, group_id: str, email: str, current_user: User):
+    async def invite_user(self, group_id: str, email: str, current_user: User):
         """✅ PERFECT FLOW: Existing → Push, New → Email"""
         # Check group exists + user is owner/member
         group = get_group_by_id(self.db, group_id)
@@ -47,7 +47,7 @@ class InviteService:
 
         if user:
             # ✅ EXISTING USER → INSTANT PUSH NOTIFICATION
-            self.notification_service.queue_push_notifications(
+            await self.notification_service.push_notification(
                 str(user.id),
                 f"📧 {current_user.name} invited you to '{group.name}'",
                 group_id=group_id,
@@ -59,6 +59,7 @@ class InviteService:
                 "status": "push_sent",
                 "email": email,
                 "user_id": str(user.id),
+                "invite_token": token,
                 "group_name": group.name,
             }
         else:

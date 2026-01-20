@@ -17,7 +17,7 @@ async def invite_user_to_group(
     db: Session = Depends(get_db),
 ):
     service = InviteService(db)
-    return service.invite_user(group_id, invite_data.email, current_user)
+    return await service.invite_user(group_id, invite_data.email, current_user)
 
 
 @router.post("/join/{token}")

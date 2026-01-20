@@ -113,7 +113,7 @@ class GroupService:
         notification_service = NotificationService(self.db)
         for member_id in members:
             if member_id != str(current_user.id):
-                await notification_service.queue_push_notification(
+                await notification_service.push_notification(
                     user_id=member_id,
                     message=f"🎉 {current_user.name} joined '{group.name}'!",
                     group_id=group_id,
