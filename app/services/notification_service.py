@@ -14,6 +14,9 @@ class NotificationService:
     def __init__(self, db: Session):
         self.db = db
 
+    # ==================================================
+    # 🔔 PUSH NOTIFICATION (ASYNC + WEBSOCKET)
+    # ==================================================
     async def push_notification(
         self,
         user_id: str,
@@ -24,7 +27,6 @@ class NotificationService:
         type: str = "info",
     ) -> str:
         notification_id = str(uuid.uuid4())
-
         payload = data or {}
 
         # ✅ Group invite payload
@@ -49,15 +51,6 @@ class NotificationService:
 
         self.db.add(record)
         self.db.commit()
-        print("📢 UserNotification record:")
-        print(f"id={record.id}")
-        print(f"user_id={record.user_id}")
-        print(f"group_id={record.group_id}")
-        print(f"title={record.title}")
-        print(f"message={record.message}")
-        print(f"type={record.type}")
-        print(f"is_read={record.is_read}")
-        print(f"data={record.data}")
 
         # 🚀 Instant WebSocket delivery
         await notification_manager.send_to_user(
@@ -74,9 +67,11 @@ class NotificationService:
             },
         )
 
-        print(f"🚨 SENT → {user_id}: {message}")
         return notification_id
 
+    # ==================================================
+    # 📥 GET USER NOTIFICATIONS
+    # ==================================================
     def get_user_notifications(
         self, user_id: str, limit: int = 50, unread_only: bool = False
     ) -> dict:
@@ -97,6 +92,9 @@ class NotificationService:
             "has_more": len(notifications) == limit,
         }
 
+    # ==================================================
+    # ✅ MARK SINGLE READ
+    # ==================================================
     def mark_notification_read(self, notification_id: str, user_id: str):
         notif = (
             self.db.query(UserNotification)
@@ -107,13 +105,16 @@ class NotificationService:
             .first()
         )
 
-        if notif:
-            notif.is_read = True
-            self.db.commit()
-            return {"status": "read"}
+        if not notif:
+            return None
 
-        return None
+        notif.is_read = True
+        self.db.commit()
+        return {"status": "read"}
 
+    # ==================================================
+    # ✅ MARK ALL READ
+    # ==================================================
     def mark_all_read(self, user_id: str):
         count = (
             self.db.query(UserNotification)
@@ -126,6 +127,47 @@ class NotificationService:
         self.db.commit()
         return {"count": count}
 
+    # ==================================================
+    # ❌ DELETE SINGLE NOTIFICATION
+    # ==================================================
+    def delete_notification(self, notification_id: str, user_id: str) -> bool:
+        notif = (
+            self.db.query(UserNotification)
+            .filter(
+                UserNotification.id == notification_id,
+                UserNotification.user_id == user_id,
+            )
+            .first()
+        )
+
+        if not notif:
+            return False
+
+        self.db.delete(notif)
+        self.db.commit()
+        return True
+
+    # ==================================================
+    # ❌ DELETE ALL NOTIFICATIONS
+    # ==================================================
+    def delete_all_notifications(self, user_id: str):
+        count = (
+            self.db.query(UserNotification)
+            .filter(UserNotification.user_id == user_id)
+            .delete()
+        )
+        self.db.commit()
+        return {"deleted": count}
+
+    # ==================================================
+    # 📊 GET STATS (PUBLIC)
+    # ==================================================
+    def get_stats(self, user_id: str) -> Dict[str, int]:
+        return self._get_stats(user_id)
+
+    # ==================================================
+    # 🔢 INTERNAL STATS HELPER
+    # ==================================================
     def _get_stats(self, user_id: str) -> Dict[str, int]:
         total = (
             self.db.query(func.count(UserNotification.id))
@@ -144,8 +186,15 @@ class NotificationService:
             or 0
         )
 
-        return {"total": total, "unread": unread, "read": total - unread}
+        return {
+            "total": total,
+            "unread": unread,
+            "read": total - unread,
+        }
 
+    # ==================================================
+    # 🔁 SERIALIZER
+    # ==================================================
     def _to_dict(self, n: UserNotification) -> Dict[str, Any]:
         return {
             "id": n.id,
