@@ -1,7 +1,7 @@
 import os
 import redis.asyncio as redis
 
-REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
+REDIS_URL = os.getenv("REDIS_URL", "redis://10.140.243.37:6379")
 
 _redis = None
 

@@ -68,7 +68,7 @@ class AuthService:
         user = User(
             name=name,
             email=email,
-            contact="098765",
+            contact="0989878765",
             is_verified=True,
             is_active=True,
             password=password,  # ✅ Plain text (no hashing yet)
