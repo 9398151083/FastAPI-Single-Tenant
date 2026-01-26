@@ -7,7 +7,6 @@ from app.routes import (
     invite_routes,
     websocket_routes,
     notification_routes,
-    ws_group_chat,
     group_message_routes,  # ✅ ADD THIS
 )
 
@@ -22,6 +21,5 @@ PROTECTED_ROUTES = [
     groups_route.router,
     invite_routes.router,
     notification_routes.router,
-    ws_group_chat.router,
     group_message_routes.router,  # ✅ ADD THIS
 ]
