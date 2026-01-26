@@ -7,3 +7,4 @@ from .group_member import GroupMembership
 from .group import Group
 from .invite import Invite
 from .notifications import UserNotification
+from .group_message import GroupMessage

@@ -6,7 +6,9 @@ from app.routes import (
     groups_route,
     invite_routes,
     websocket_routes,
-    notification_routes,  # ✅ ADD THIS
+    notification_routes,
+    ws_group_chat,
+    group_message_routes,  # ✅ ADD THIS
 )
 
 PUBLIC_ROUTES = [
@@ -19,5 +21,7 @@ PROTECTED_ROUTES = [
     expense_route.router,
     groups_route.router,
     invite_routes.router,
-    notification_routes.router,  # ✅ ADD THIS
+    notification_routes.router,
+    ws_group_chat.router,
+    group_message_routes.router,  # ✅ ADD THIS
 ]
