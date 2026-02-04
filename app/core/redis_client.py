@@ -5,8 +5,8 @@ redis_client = redis.Redis(
     port=6379,
     db=0,
     decode_responses=True,
-    socket_connect_timeout=5,  # fail fast if unreachable
-    socket_timeout=5,
+    # socket_connect_timeout=5,  # fail fast if unreachable
+    # socket_timeout=5,
 )
 
 # Optional: verify connection on startup
